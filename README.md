@@ -199,7 +199,7 @@ spotify-migration/
 │   ├── destination.py    # cleanup (WIPE/ARCHIVE/SKIP) + idempotent migration
 │   ├── prompts.py        # questionary prompts (mode picker, confirmations)
 │   └── utils.py          # retry with Retry-After, JSON report writer,
-│                         #   workarounds for broken spotipy endpoints
+│                         #   current Spotify library endpoint helpers
 ├── .github/              # CI workflow, issue/PR templates, community docs
 ├── logs/                 # JSON reports (git-ignored)
 ├── pyproject.toml        # packaging, console script, ruff config
@@ -209,7 +209,7 @@ spotify-migration/
 
 ## Known limitations
 
-- **spotipy 2.26 bug workaround.** Several library/follow methods in spotipy 2.26 (`current_user_saved_tracks_*`, `current_user_saved_albums_*`, `user_follow_artists`, `user_unfollow_artists`, `current_user_follow_playlist`) target a non-existent `me/library` endpoint instead of the correct Web API URLs. `utils.py` contains drop-in replacements that call the correct endpoints directly. Once upstream fixes this, the wrappers can be removed.
+- **Spotify Development Mode API.** The migrator requires spotipy 2.26 or newer and uses Spotify's current generic `me/library` endpoint for saved tracks, saved albums, followed artists and followed playlists. Playlist contents use the current `/items` routes and response fields.
 - **Playlist folders are not migrated.** Spotify's Web API does not expose folders — they exist only in the desktop client.
 - **Collaborative playlists are copied as private.** Spotify requires a playlist to be public before a second flip to collaborative.
 - **Local files** (`track.is_local == True`) are skipped and logged to `failures`.

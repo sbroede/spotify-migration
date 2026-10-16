@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- Updated all write operations to Spotify's February 2026 Development Mode API: generic `/me/library` calls, `/me/playlists` creation and `/playlists/{id}/items` reads.
+- Reduced generic library batches to the current 40-URI limit and raised the minimum spotipy version to 2.26.0.
+
 ## [1.0.1] — 2026-04-21
 
 ### Changed

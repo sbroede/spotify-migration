@@ -4,7 +4,7 @@ BIN    := $(VENV)/bin
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install-dev run lint format hooks clean
+.PHONY: help install install-dev run test lint format hooks clean
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -22,6 +22,9 @@ install-dev: install  ## Install development dependencies as well
 
 run:  ## Execute the migrator (requires a populated .env)
 	$(BIN)/python -m spotify_migration
+
+test:  ## Run the unit tests
+	$(BIN)/python -m unittest discover -s tests -v
 
 lint:  ## Run ruff lint + format check
 	$(BIN)/ruff check .

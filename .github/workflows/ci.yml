@@ -52,3 +52,5 @@ jobs:
         run: |
           python -c "import spotify_migration; print('imports OK, version', spotify_migration.__version__)"
           command -v spotify-migration  # verify the console script was installed
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v

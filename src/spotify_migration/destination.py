@@ -15,6 +15,7 @@ import spotipy
 
 from .source import AccountSnapshot, OwnedPlaylist
 from .utils import (
+    LIBRARY_BATCH_SIZE,
     FailureLog,
     chunks,
     follow_artists,
@@ -25,6 +26,7 @@ from .utils import (
     saved_tracks_add,
     saved_tracks_delete,
     unfollow_artists,
+    unfollow_playlist,
 )
 
 ARCHIVE_PREFIX = "[ARCHIVED] "
@@ -90,7 +92,7 @@ def cleanup_wipe(
     progress("wipe_playlists", 0, len(all_playlists))
     for idx, pl in enumerate(all_playlists, start=1):
         try:
-            safe_call(sp.current_user_unfollow_playlist, pl.id)
+            safe_call(unfollow_playlist, sp, pl.id)
             report["playlists_removed"] += 1
         except Exception as exc:  # noqa: BLE001
             failures.add("wipe_playlist", id=pl.id, name=pl.name, reason=str(exc))
@@ -100,7 +102,7 @@ def cleanup_wipe(
     total = len(liked_uris)
     done = 0
     progress("wipe_liked", done, total)
-    for batch in chunks(liked_uris, 50):
+    for batch in chunks(liked_uris, LIBRARY_BATCH_SIZE):
         try:
             safe_call(saved_tracks_delete, sp, batch)
             report["liked_removed"] += len(batch)
@@ -113,7 +115,7 @@ def cleanup_wipe(
     total = len(artist_ids)
     done = 0
     progress("wipe_artists", done, total)
-    for batch in chunks(artist_ids, 50):
+    for batch in chunks(artist_ids, LIBRARY_BATCH_SIZE):
         try:
             safe_call(unfollow_artists, sp, batch)
             report["artists_unfollowed"] += len(batch)
@@ -126,7 +128,7 @@ def cleanup_wipe(
     total = len(album_ids)
     done = 0
     progress("wipe_albums", done, total)
-    for batch in chunks(album_ids, 50):
+    for batch in chunks(album_ids, LIBRARY_BATCH_SIZE):
         try:
             safe_call(saved_albums_delete, sp, batch)
             report["albums_removed"] += len(batch)
@@ -206,12 +208,10 @@ def cleanup_archive(
         existing_uris = set(existing_archive.track_uris)
         report["archive_playlist_reused"] = True
     else:
-        me_id = snapshot.me["id"]
         archive_name = ARCHIVE_LIKED_NAME
         try:
             new_pl = safe_call(
-                sp.user_playlist_create,
-                me_id,
+                sp.current_user_playlist_create,
                 archive_name,
                 public=False,
                 description="Liked songs archived before migration.",
@@ -246,7 +246,7 @@ def cleanup_archive(
     total = len(uris)
     done = 0
     progress("archive_liked_clear", done, total)
-    for batch in chunks(uris, 50):
+    for batch in chunks(uris, LIBRARY_BATCH_SIZE):
         try:
             safe_call(saved_tracks_delete, sp, batch)
             report["liked_slot_cleared"] += len(batch)
@@ -283,7 +283,6 @@ def migrate_content(
     source: AccountSnapshot,
     destination: AccountSnapshot,
     *,
-    destination_user_id: str,
     failures: FailureLog,
     progress: Progress = _noop_progress,
 ) -> dict:
@@ -345,8 +344,7 @@ def migrate_content(
         else:
             try:
                 new_pl = safe_call(
-                    sp.user_playlist_create,
-                    destination_user_id,
+                    sp.current_user_playlist_create,
                     pl.name,
                     public=pl.public,
                     description=pl.description or "",
@@ -401,13 +399,13 @@ def migrate_content(
             time.sleep(LIKED_DELAY_S)
         progress("mig_liked", idx, total)
 
-    # 4. Followed artists – batches of 50, only the missing ones.
+    # 4. Followed artists – library-sized batches, only the missing ones.
     missing_artists = [a.id for a in source.followed_artists if a.id not in dest_artist_ids]
     stats["artists_follow_skipped"] = len(source.followed_artists) - len(missing_artists)
     total = len(missing_artists)
     done = 0
     progress("mig_artists", done, total)
-    for batch in chunks(missing_artists, 50):
+    for batch in chunks(missing_artists, LIBRARY_BATCH_SIZE):
         try:
             safe_call(follow_artists, sp, batch)
             stats["artists_followed"] += len(batch)

@@ -1,10 +1,4 @@
-"""Shared utilities: rate-limit retry, failure log, JSON report writer.
-
-Also provides drop-in replacements for several spotipy 2.26 endpoints that
-target the wrong URL (`me/library` instead of the correct Web API paths).
-When upstream spotipy is fixed, the `*_tracks`, `*_albums`, `follow_*`,
-`unfollow_*` and `follow_playlist` helpers can be removed.
-"""
+"""Shared utilities: retries, reporting and Spotify library operations."""
 
 from __future__ import annotations
 
@@ -21,6 +15,9 @@ from spotipy.exceptions import SpotifyException
 # Reports are written to the directory the user launches the tool from,
 # so relative paths in the terminal output are easy to click.
 LOGS_DIR = Path.cwd() / "logs"
+
+# PUT/DELETE /me/library accepts at most 40 Spotify URIs per request.
+LIBRARY_BATCH_SIZE = 40
 
 
 def safe_call(fn: Callable, *args: Any, max_retries: int = 3, **kwargs: Any):
@@ -100,43 +97,54 @@ def chunks(seq: list, size: int):
         yield seq[i : i + size]
 
 
-# ---------- Workarounds for spotipy 2.26 ----------
-# Several library/follow methods in spotipy 2.26 send requests to a
-# non-existent `me/library` endpoint. The wrappers below issue the same calls
-# against the correct Web API URLs using sp._put / sp._delete.
+# ---------- Spotify library operations ----------
+# Since the February 2026 Development Mode API changes, tracks, albums,
+# followed artists and followed playlists all use the generic /me/library
+# endpoint and are identified by Spotify URIs.
 
 
-def _track_id(uri_or_id: str) -> str:
-    """Return a bare track id from either a full URI or a raw id."""
-    return uri_or_id.split(":")[-1]
+def _spotify_uri(item_type: str, uri_or_id: str) -> str:
+    """Return a Spotify URI from either an existing URI or a raw Spotify ID."""
+    if uri_or_id.startswith("spotify:"):
+        return uri_or_id
+    return f"spotify:{item_type}:{uri_or_id}"
+
+
+def _library_add(sp, uris: list[str]):
+    return sp._put("me/library", uris=",".join(uris))
+
+
+def _library_delete(sp, uris: list[str]):
+    return sp._delete("me/library", uris=",".join(uris))
 
 
 def saved_tracks_add(sp, uris: list[str]):
-    ids = [_track_id(u) for u in uris]
-    return sp._put("me/tracks?ids=" + ",".join(ids))
+    return _library_add(sp, [_spotify_uri("track", value) for value in uris])
 
 
 def saved_tracks_delete(sp, uris: list[str]):
-    ids = [_track_id(u) for u in uris]
-    return sp._delete("me/tracks?ids=" + ",".join(ids))
+    return _library_delete(sp, [_spotify_uri("track", value) for value in uris])
 
 
 def saved_albums_add(sp, album_ids: list[str]):
-    return sp._put("me/albums?ids=" + ",".join(album_ids))
+    return _library_add(sp, [_spotify_uri("album", value) for value in album_ids])
 
 
 def saved_albums_delete(sp, album_ids: list[str]):
-    return sp._delete("me/albums?ids=" + ",".join(album_ids))
+    return _library_delete(sp, [_spotify_uri("album", value) for value in album_ids])
 
 
 def follow_artists(sp, artist_ids: list[str]):
-    return sp._put("me/following?type=artist&ids=" + ",".join(artist_ids))
+    return _library_add(sp, [_spotify_uri("artist", value) for value in artist_ids])
 
 
 def unfollow_artists(sp, artist_ids: list[str]):
-    return sp._delete("me/following?type=artist&ids=" + ",".join(artist_ids))
+    return _library_delete(sp, [_spotify_uri("artist", value) for value in artist_ids])
 
 
 def follow_playlist(sp, playlist_id: str):
-    pid = playlist_id.split(":")[-1]
-    return sp._put(f"playlists/{pid}/followers")
+    return _library_add(sp, [_spotify_uri("playlist", playlist_id)])
+
+
+def unfollow_playlist(sp, playlist_id: str):
+    return _library_delete(sp, [_spotify_uri("playlist", playlist_id)])

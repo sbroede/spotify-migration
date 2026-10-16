@@ -91,17 +91,18 @@ def _fetch_playlist_tracks(sp: spotipy.Spotify, playlist_id: str) -> tuple[list[
     skipped_none = 0
     page = sp.playlist_items(
         playlist_id,
-        limit=100,
+        limit=50,
         additional_types=("track",),
-        fields="items(track(uri,is_local,type)),next",
     )
     while True:
         for item in page.get("items", []):
-            track = item.get("track")
+            # Development Mode renamed PlaylistTrackObject.track to item in
+            # February 2026. Keep the fallback for Extended Quota responses.
+            track = item.get("item") or item.get("track")
             if track is None:
                 skipped_none += 1
                 continue
-            if track.get("is_local"):
+            if item.get("is_local") or track.get("is_local"):
                 skipped_local += 1
                 continue
             uri = track.get("uri")
